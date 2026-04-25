@@ -6,6 +6,7 @@ export interface Article {
   content: string;
   createdAt: number;
   source: ArticleSource;
+  isSample?: boolean;
   /** 软删除时间戳；无此字段表示在架 */
   deletedAt?: number;
 }

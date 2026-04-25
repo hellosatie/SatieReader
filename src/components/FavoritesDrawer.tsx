@@ -57,9 +57,9 @@ export function FavoritesDrawer({
     <div className="drawer-backdrop" onMouseDown={onClose}>
       <div className="drawer drawer-wide" onMouseDown={(e) => e.stopPropagation()}>
         <header className="drawer-head">
-          <h2>收藏夹</h2>
+          <h2>单词本</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
-            ×
+            ✖️
           </button>
         </header>
 

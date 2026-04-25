@@ -65,10 +65,13 @@ export function SnippetBubble({
           <span className="badge">{mode === "word" ? "词句" : "句子"}</span>
           <div className="bubble-toolbar-actions">
             <button type="button" className="btn micro" onClick={onExpandSidebar}>
-              侧边栏
+              <span className="btn-ico" aria-hidden>
+                🧭
+              </span>
+              展开至侧栏
             </button>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
-              ×
+              ✖️
             </button>
           </div>
         </header>

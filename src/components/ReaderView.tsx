@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article } from "../types";
+import { translateToZh } from "../services/translate";
 
 type Props = {
   article: Article;
   onBack: () => void;
   onOpenFavorites: () => void;
-  onImport: () => void;
   onSaveArticle: (id: string, patch: { title?: string; content?: string }) => void;
   onSelectSnippet: (payload: {
     mode: "word" | "sentence";
@@ -20,17 +20,35 @@ export function ReaderView({
   article,
   onBack,
   onOpenFavorites,
-  onImport,
   onSaveArticle,
   onSelectSnippet,
 }: Props) {
   const articleRef = useRef<HTMLElement>(null);
+  const readerBodyRef = useRef<HTMLDivElement>(null);
   const editBodyRef = useRef<HTMLTextAreaElement>(null);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(article.title);
   const [draftContent, setDraftContent] = useState(article.content);
   const [showResumeHint, setShowResumeHint] = useState(false);
   const [resumeRatio, setResumeRatio] = useState(0);
+  const [paragraphPanel, setParagraphPanel] = useState<{
+    index: number;
+    text: string;
+    translation: string;
+    loading: boolean;
+    err?: string;
+  } | null>(null);
+
+  const paragraphs = useMemo(() => {
+    const parts = article.content.split(/\n\s*\n+/).map((p) => p.trim()).filter(Boolean);
+    let cursor = 0;
+    return parts.map((text, index) => {
+      const found = article.content.indexOf(text, cursor);
+      const start = found >= 0 ? found : cursor;
+      cursor = start + text.length;
+      return { text, index, start };
+    });
+  }, [article.content]);
 
   const storageKey = `satie-reader-progress:${article.id}`;
 
@@ -85,33 +103,37 @@ export function ReaderView({
   const buildContext = useCallback(
     (anchor: number, len: number) => {
       const full = article.content;
-      const before = 220;
-      const after = 220;
-      const start = Math.max(0, anchor - before);
-      const end = Math.min(full.length, anchor + len + after);
-      let chunk = full.slice(start, end);
-      const rel = anchor - start;
+      const sentenceStart = findSentenceStart(full, anchor);
+      const sentenceEnd = findSentenceEnd(full, anchor + Math.max(1, len));
+      let chunk = full.slice(sentenceStart, sentenceEnd).trim();
+      const rel = Math.max(0, anchor - sentenceStart);
       if (rel >= 0 && rel + len <= chunk.length) {
         chunk =
           chunk.slice(0, rel) + "【" + chunk.slice(rel, rel + len) + "】" + chunk.slice(rel + len);
       }
-      return chunk.trim();
+      return chunk;
     },
     [article.content]
   );
 
   const offsetInArticle = useCallback((node: Node, offset: number): number | null => {
-    const body = articleRef.current?.querySelector(".reader-body");
-    if (!body?.firstChild) return null;
-    const startNode = body.firstChild;
+    const body = readerBodyRef.current;
+    if (!body || !body.contains(node)) return null;
+    const element = (node instanceof Element ? node : node.parentElement)?.closest(
+      ".reader-paragraph"
+    ) as HTMLElement | null;
+    if (!element) return null;
+    const start = Number(element.dataset.start ?? "0");
+    const textEl = element.querySelector(".reader-paragraph-text");
+    if (!textEl) return null;
     const range = document.createRange();
     try {
-      range.setStart(startNode, 0);
+      range.setStart(textEl, 0);
       range.setEnd(node, offset);
     } catch {
       return null;
     }
-    return range.toString().length;
+    return start + range.toString().length;
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -200,29 +222,57 @@ export function ReaderView({
     }, 0);
   };
 
+  const openParagraphTranslation = async (index: number, text: string) => {
+    setParagraphPanel({ index, text, translation: "", loading: true });
+    try {
+      const translation = await translateToZh(text);
+      setParagraphPanel({ index, text, translation, loading: false });
+    } catch {
+      setParagraphPanel({
+        index,
+        text,
+        translation: "",
+        loading: false,
+        err: "段落翻译暂不可用，请稍后再试。",
+      });
+    }
+  };
+
   return (
     <div className="reader-layout reader-layout-wide">
       <header className="reader-toolbar">
         <button type="button" className="btn ghost" onClick={onBack}>
-          ← 文库
+          <span className="btn-ico" aria-hidden>
+            ⬅️
+          </span>
+          文库
         </button>
         <h1 className="reader-title">{article.title}</h1>
-        <button type="button" className="btn ghost" onClick={onImport}>
-          导入
-        </button>
         <button type="button" className="btn secondary" onClick={onOpenFavorites}>
-          收藏夹
+          <span className="btn-ico" aria-hidden>
+            📒
+          </span>
+          单词本
         </button>
         {!editing ? (
           <button type="button" className="btn secondary" onClick={enterEditAtCurrentPosition}>
+            <span className="btn-ico" aria-hidden>
+              ✏️
+            </span>
             编辑
           </button>
         ) : (
           <>
             <button type="button" className="btn primary" onClick={finishEdit}>
+              <span className="btn-ico" aria-hidden>
+                ✅
+              </span>
               保存
             </button>
             <button type="button" className="btn ghost" onClick={cancelEdit}>
+              <span className="btn-ico" aria-hidden>
+                ✖️
+              </span>
               取消
             </button>
           </>
@@ -263,9 +313,53 @@ export function ReaderView({
             </label>
           </div>
         ) : (
-          <div className="reader-body">{article.content}</div>
+          <div ref={readerBodyRef} className="reader-body">
+            {paragraphs.map((paragraph) => (
+              <p
+                key={`${paragraph.index}-${paragraph.text.slice(0, 24)}`}
+                className="reader-paragraph"
+                data-start={paragraph.start}
+              >
+                <span className="reader-paragraph-text">{paragraph.text}</span>
+                <button
+                  type="button"
+                  className="para-flag-btn"
+                  aria-label="翻译本段"
+                  onClick={() => openParagraphTranslation(paragraph.index, paragraph.text)}
+                >
+                  🌐
+                </button>
+              </p>
+            ))}
+          </div>
         )}
       </article>
+      {paragraphPanel && (
+        <aside className="para-translate-drawer" role="dialog" aria-label="段落翻译">
+          <header className="para-translate-head">
+            <h3>段落翻译</h3>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setParagraphPanel(null)}
+              aria-label="关闭段落翻译"
+            >
+              ✖️
+            </button>
+          </header>
+          <div className="para-translate-body">
+            <p className="muted small">第 {paragraphPanel.index + 1} 段</p>
+            <blockquote className="sel-quote">{paragraphPanel.text}</blockquote>
+            {paragraphPanel.loading && <p className="muted">翻译中…</p>}
+            {!paragraphPanel.loading && paragraphPanel.err && (
+              <p className="error-inline">{paragraphPanel.err}</p>
+            )}
+            {!paragraphPanel.loading && !paragraphPanel.err && (
+              <p className="zh-line">{paragraphPanel.translation}</p>
+            )}
+          </div>
+        </aside>
+      )}
       {showResumeHint && !editing && (
         <button
           type="button"
@@ -276,11 +370,29 @@ export function ReaderView({
           }}
           aria-label="跳转到上次阅读位置"
         >
-          ↧ 回到上次阅读
+          🔽 回到上次阅读
         </button>
       )}
     </div>
   );
+}
+
+function findSentenceStart(text: string, from: number): number {
+  for (let i = Math.max(0, from - 1); i >= 0; i--) {
+    if (/[.!?]/.test(text[i])) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
+function findSentenceEnd(text: string, from: number): number {
+  for (let i = Math.max(0, from); i < text.length; i++) {
+    if (/[.!?]/.test(text[i])) {
+      return i + 1;
+    }
+  }
+  return text.length;
 }
 
 function inferSentence(text: string): boolean {

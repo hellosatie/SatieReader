@@ -104,7 +104,25 @@ export function LookupBody({
 
       {mode === "word" && (
         <section className={secClass}>
-          <h4>释义与例句</h4>
+          <h4>词根</h4>
+          {dictErr && <p className="muted">{dictErr}</p>}
+          {!dict && !dictErr && <p className="muted">正在查询词根…</p>}
+          {dict && dict.roots.length > 0 && (
+            <ul className="root-list">
+              {dict.roots.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          )}
+          {dict && dict.roots.length === 0 && (
+            <p className="muted small">暂未识别到清晰词根，可结合释义与例句记忆。</p>
+          )}
+        </section>
+      )}
+
+      {mode === "word" && (
+        <section className={secClass}>
+          <h4>释义和例句</h4>
           {/\s/.test(text.trim()) && (
             <p className="muted small">
               词组模式：词典释义针对首个英文词「{text.trim().split(/\s+/)[0]}」，整段翻译见上文。
@@ -127,25 +145,6 @@ export function LookupBody({
                   </li>
                 ))}
               </ol>
-              <div className="extra-block">
-                <h5>引申与搭配</h5>
-                <p className="muted small">
-                  英文释义可作为「引申义」参考；多义项时请结合上下文选择最贴近的一条。
-                </p>
-              </div>
-              {dict.roots.length > 0 && (
-                <div className="extra-block">
-                  <h5>词根记忆</h5>
-                  <ul className="root-list">
-                    {dict.roots.map((r, i) => (
-                      <li key={i}>{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {dict.roots.length === 0 && (
-                <p className="muted small">暂未识别到清晰词根，可结合释义与例句记忆。</p>
-              )}
             </div>
           )}
         </section>
@@ -184,7 +183,10 @@ export function LookupBody({
               })
             }
           >
-            收藏到夹
+            <span className="btn-ico" aria-hidden>
+              ⭐
+            </span>
+            收藏到单词本
           </button>
         </footer>
       )}

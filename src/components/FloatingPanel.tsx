@@ -40,10 +40,13 @@ export function FloatingPanel({
                 onSwitchToBubble();
               }}
             >
+              <span className="btn-ico" aria-hidden>
+                💬
+              </span>
               气泡模式
             </button>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
-              ×
+              ✖️
             </button>
           </div>
         </div>

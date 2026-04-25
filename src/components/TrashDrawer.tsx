@@ -17,7 +17,7 @@ export function TrashDrawer({ open, onClose, trashed, onRestore, onPurge }: Prop
         <header className="drawer-head">
           <h2>回收站</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
-            ×
+            ✖️
           </button>
         </header>
         <p className="muted small trash-hint">

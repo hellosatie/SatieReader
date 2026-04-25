@@ -252,3 +252,155 @@ curl https://ark.cn-beijing.volces.com/api/v3/responses \
     ]
 }'
 
+我直接在火山服务器后台登录了，在那里打开了终端，后面怎么操作
+
+公网IP是101.96.213.232
+
+好，那你现在就可以直接通过这个地址访问：
+
+http://101.96.213.232
+如果打不开，按这个最短检查顺序来（在服务器终端执行）：
+
+pm2 ls
+sudo nginx -t
+sudo systemctl status nginx --no-pager
+curl -I http://127.0.0.1
+curl -I http://101.96.213.232
+并在火山控制台确认安全组已放行：
+
+TCP 80（必须）
+TCP 443（可选，后续 HTTPS）
+TCP 22（管理用）
+如果你愿意，我下一步可以给你把 Nginx 直接改成绑定这个 IP（server_name 101.96.213.232;），并加上 HTTPS 的后续方案。
+
+Welcome to nginx!
+
+If you see this page, the nginx web server is successfully installed and working. Further configuration is required.
+
+
+
+For online documentation and support please refer to nginx.org.
+
+Commercial support is available at nginx.com.
+
+
+
+Thank you for using nginx.
+
+很好，这说明服务器和 Nginx 都通了，只是还在默认站点页。
+你现在把默认配置替换成你的 Satie Reader 配置即可。
+
+在服务器终端按下面执行（整段复制）：
+
+# 1) 写入你的站点配置（覆盖默认欢迎页）
+sudo tee /etc/nginx/conf.d/satie-reader.conf > /dev/null <<'EOF'
+server {
+    listen 80 default_server;
+    server_name 101.96.213.232;
+    root /opt/satie-reader/dist;
+    index index.html;
+    location / {
+        try_files $uri /index.html;
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+EOF
+# 2) 关掉默认站点（不同发行版路径可能不同，存在就删）
+sudo rm -f /etc/nginx/conf.d/default.conf
+sudo rm -f /etc/nginx/sites-enabled/default
+# 3) 检查并重载 nginx
+sudo nginx -t
+sudo systemctl reload nginx
+然后刷新浏览器：
+
+http://101.96.213.232
+再确认后端代理是否在跑：
+
+pm2 ls
+如果没跑，启动：
+
+cd /opt/satie-reader
+pm2 start server/proxy.mjs --name satie-api
+pm2 save
+如果你执行后有任何一条报错，把报错贴我，我直接告诉你改哪一行。
+
+网页在iOS跑的效果不好，请把单个按钮变小，在页面上更宽松一些
+
+已帮你做了 iOS 端的“按钮更小 + 布局更宽松”优化，改动在 src/styles/global.css，并已通过构建。
+
+主要调整：
+
+缩小移动端按钮尺寸（max-width: 768px）
+普通按钮：更小的 padding 和 font-size
+微按钮（.btn.micro）进一步缩小
+拉开常用按钮组间距（更不拥挤）
+home-nav、reader-toolbar、fav-actions、trash-actions 等
+阅读页移动端留白优化
+reader-layout 内边距更轻
+reader-toolbar 支持换行，减少顶栏挤压
+reader-article 减小卡片内边距，提升可读区比例
+弹窗/导入页在小屏也减少压迫感
+wizard、confirm-shell、confirm-footer 间距微调
+验证：
+
+npm run build ✅ 成功
+如果你愿意，我可以再给 iPhone 小屏（如 390px 以下）单独再收一版，让按钮再小一档并把顶栏固定为两行。
+
+再修改：
+
+1、在首页先加上2-3篇示例文章，都是中高阶科技、财经相关的英文文章，并标注“sample”的图标
+
+2、从文章返回首页时动效丢失了
+
+3、在文章阅读界面，删掉“导入”按钮，收藏夹 改成 单词本，并且这几个按钮都加上icon
+
+4、点击单词弹出来的浮窗中，翻译下面是词根、释义和例句、上下文（以上一句的句号结尾处开始取新的这句，直到新的句号），删除引申与搭配
+
+5、收藏到夹 按钮 改成 收藏到单词本，并增加icon
+
+6、侧边栏 按钮 改成 展开至侧栏，并增加icon
+
+7、正文阅读时在小屏幕左右滑动页面也跟着动，这样不行，要根据页面大小来灵活展示页面，不能出现还可以左右滑动整个阅读页的情况
+
+8、在每个段落最后，都增加一个小旗帜icon，点击后会呈现这一段的翻译；这个翻译浮在页面正下方，可以和阅读正文界面独立滚动，也可以被关闭
+
+8 条我都已落地到项目里，并且已通过构建验证（npm run build ✅）。
+
+这次主要改动如下：
+
+首页加入了 3 篇中高阶科技/财经英文示例文章（首次空库自动注入），并在列表里标注 🧪 sample
+改动：src/services/storage.ts、src/types.ts、src/App.tsx
+从阅读页返回首页时，首页动效恢复
+给首页容器重新加了入场动画
+改动：src/styles/global.css
+阅读页工具栏调整
+删除了“导入”按钮
+“收藏夹”改为“单词本”
+相关按钮都加了 icon（文库、单词本、编辑、保存、取消）
+改动：src/components/ReaderView.tsx
+划词浮窗内容结构重排（词模式）
+顺序改为：翻译 → 词根 → 释义和例句 → 上下文
+删除“引申与搭配”
+上下文改成“从上一个句号后到下一个句号”为边界抽取
+改动：src/components/LookupBody.tsx、src/components/ReaderView.tsx
+按钮文案与 icon 调整
+“收藏到夹”→“⭐ 收藏到单词本”
+“侧边栏”→“⤢ 展开至侧栏”
+改动：src/components/LookupBody.tsx、src/components/SnippetBubble.tsx
+小屏阅读横向滑动问题修复
+全局禁横向滚动 + 阅读正文断词换行 + 工具栏布局约束
+改动：src/styles/global.css
+每段末尾增加小旗帜 icon
+点击 🚩 可翻译该段
+翻译在页面底部浮层展示，独立滚动，可关闭
+改动：src/components/ReaderView.tsx、src/styles/global.css
+术语统一
+抽屉标题“收藏夹”改成“单词本”
+改动：src/components/FavoritesDrawer.tsx
+如果你愿意，我下一步可以再做一轮 iPhone 真实视口（390px）专门微调，把阅读页顶部按钮再压缩成更稳定的两行布局。
