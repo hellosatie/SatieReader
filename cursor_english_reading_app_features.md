@@ -403,4 +403,33 @@ npm run build ✅ 成功
 术语统一
 抽屉标题“收藏夹”改成“单词本”
 改动：src/components/FavoritesDrawer.tsx
+
+---
+
+补充对话记录
+
+关于首页 sample 文章的更新与同步：
+用户要求把首页增加 BBC sample 文章。先把两篇 sample 加到首页列表里，其中一篇是 BBC News，一篇是 BBC Future。
+随后用户指出 BBC Future 那篇 sample 要替换成完整文本，我将 `Your bad habits are destroying your charging cables` 的正文内容写入了 sample 数据。
+之后用户又要求把另一篇 sample 也替换为完整文本，我将 `US justice department drops probe into Fed chairman Jerome Powell` 的正文内容写入了 sample 数据。
+
+关于代码发布到 GitHub：
+用户要求把代码同步到 GitHub。我检查了仓库状态，提交了当前变更并推送到 `origin/main`。
+提交记录包括：
+- `35af530 feat: add homepage sample articles and reader polish`
+- `4670313 fix: update homepage sample articles content`
+
+关于服务器更新：
+用户在服务器上尝试 `git pull` 失败，因为当前目录不是 Git 仓库。我帮助用户定位部署环境，发现服务由 `pm2` 管理，进程名为 `satie-api`，并建议通过 `pm2 show satie-api` 查找真实项目目录。
+
+关于 sample 文章仍未变化：
+用户发现页面上的 BBC sample 还是旧内容。我解释原因是浏览器 `localStorage` 里已有旧文章数据，`loadArticles()` 优先读取本地存储，所以只改代码不会自动覆盖旧缓存。
+
+关于自动更新 sample：
+用户要求自动更新，不必手动清缓存。我已修改 `src/services/storage.ts` 的 `loadArticles()`：
+- 当本地没有文章或为空时，仍然初始化为 `SAMPLE_ARTICLES`
+- 当本地已有文章时，会按 sample 的 `id` 做合并，用代码里的最新 sample 覆盖同 ID 的旧 sample
+- 合并后的结果会重新写回 `localStorage`
+这样旧用户下次打开页面时，BBC sample 会自动更新为最新文本。
+
 如果你愿意，我下一步可以再做一轮 iPhone 真实视口（390px）专门微调，把阅读页顶部按钮再压缩成更稳定的两行布局。

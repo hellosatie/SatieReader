@@ -135,7 +135,11 @@ export function loadArticles(): Article[] {
       localStorage.setItem(ARTICLES_KEY, JSON.stringify(SAMPLE_ARTICLES));
       return SAMPLE_ARTICLES;
     }
-    return parsed;
+
+    const sampleById = new Map(SAMPLE_ARTICLES.map((article) => [article.id, article]));
+    const merged = parsed.map((article) => sampleById.get(article.id) ?? article);
+    localStorage.setItem(ARTICLES_KEY, JSON.stringify(merged));
+    return merged;
   } catch {
     return SAMPLE_ARTICLES;
   }
