@@ -553,12 +553,18 @@ body {
   background: rgba(20, 16, 12, 0.45);
 }
 
-.wizard {
+.wizard,
+.help-card {
   width: min(900px, 100%);
   background: var(--paper);
   border-radius: calc(var(--radius) + 4px);
   box-shadow: var(--shadow);
   padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.help-card {
+  max-width: 760px;
+  margin: 4rem auto 0;
 }
 
 .wizard-header {
