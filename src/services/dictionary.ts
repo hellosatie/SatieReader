@@ -12,25 +12,81 @@ export interface DictionaryResult {
   roots: string[];
 }
 
+const DICT_CACHE_PREFIX = "satie-reader-dict-";
+const DICT_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+
 export async function fetchDictionary(word: string): Promise<DictionaryResult | null> {
   const w = word.trim().toLowerCase().replace(/[^a-z'\-]/gi, "");
   if (!w || w.length > 45) return null;
+
+  const cached = readCachedDictionary(w);
+  if (cached) return cached;
+
+  const fast = await fetchFastDictionary(w);
+  if (fast) {
+    cacheDictionary(w, fast);
+    return fast;
+  }
+
   const modelResult = await askModelDictionary(w);
   if (!modelResult) return null;
   const roots = modelResult.roots.length > 0 ? modelResult.roots : inferRoots(modelResult.word);
-  return {
+  const result = {
     word: modelResult.word,
     phonetic: modelResult.phonetic,
     senses: modelResult.senses.slice(0, 12),
     roots,
   };
+  cacheDictionary(w, result);
+  return result;
+}
+
+function readCachedDictionary(word: string): DictionaryResult | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(word));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; data?: DictionaryResult };
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > DICT_CACHE_TTL_MS) {
+      localStorage.removeItem(cacheKey(word));
+      return null;
+    }
+    return normalizeDictionaryResult(parsed.data, word);
+  } catch {
+    return null;
+  }
+}
+
+function cacheDictionary(word: string, data: DictionaryResult): void {
+  try {
+    localStorage.setItem(
+      cacheKey(word),
+      JSON.stringify({ savedAt: Date.now(), data })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function cacheKey(word: string): string {
+  return `${DICT_CACHE_PREFIX}${word}`;
+}
+
+async function fetchFastDictionary(word: string): Promise<DictionaryResult | null> {
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as unknown;
+    return normalizeFastDictionaryResult(data, word);
+  } catch {
+    return null;
+  }
 }
 
 async function askModelDictionary(word: string): Promise<DictionaryResult | null> {
   try {
     const prompt = [
       "你是英语词汇学习助手。",
-      `请针对单词 "${word}" 输出 JSON，不要输出 JSON 以外任何文本。`,
+      `请针对单词 \"${word}\" 输出 JSON，不要输出 JSON 以外任何文本。`,
       "JSON schema:",
       "{",
       '  "word": "string",',
@@ -51,6 +107,61 @@ async function askModelDictionary(word: string): Promise<DictionaryResult | null
   } catch {
     return null;
   }
+}
+
+function normalizeFastDictionaryResult(payload: unknown, fallbackWord: string): DictionaryResult | null {
+  if (!Array.isArray(payload)) return null;
+  const entry = payload[0] as {
+    word?: unknown;
+    phonetic?: unknown;
+    phonetics?: unknown;
+    meanings?: unknown;
+  } | undefined;
+  if (!entry || typeof entry !== "object") return null;
+
+  const word = typeof entry.word === "string" && entry.word.trim() ? entry.word.trim() : fallbackWord;
+  const phonetic =
+    typeof entry.phonetic === "string" && entry.phonetic.trim()
+      ? entry.phonetic.trim()
+      : Array.isArray(entry.phonetics)
+        ? entry.phonetics.find(
+            (p): p is { text?: unknown } =>
+              Boolean(p && typeof p === "object" && typeof p.text === "string" && p.text.trim())
+          )?.text?.trim()
+        : undefined;
+
+  const meaningsRaw = Array.isArray(entry.meanings) ? entry.meanings : [];
+  const senses: DictionarySense[] = meaningsRaw
+    .flatMap((meaning) => {
+      if (!meaning || typeof meaning !== "object") return [];
+      const m = meaning as { definitions?: unknown; partOfSpeech?: unknown };
+      const defs = Array.isArray(m.definitions) ? m.definitions : [];
+      return defs.map((definitionItem) => {
+        if (!definitionItem || typeof definitionItem !== "object") return null;
+        const d = definitionItem as { definition?: unknown; example?: unknown };
+        const definition =
+          typeof d.definition === "string" && d.definition.trim() ? d.definition.trim() : "";
+        if (!definition) return null;
+        const example =
+          typeof d.example === "string" && d.example.trim() ? d.example.trim() : "";
+        return {
+          definition: m.partOfSpeech
+            ? `${String(m.partOfSpeech)}: ${definition}`
+            : definition,
+          examples: example ? [example] : [],
+        };
+      });
+    })
+    .filter((v): v is DictionarySense => Boolean(v))
+    .slice(0, 8);
+
+  if (senses.length === 0) return null;
+  return {
+    word,
+    phonetic,
+    senses,
+    roots: inferRoots(word),
+  };
 }
 
 function safeParseModelJson(raw: string): unknown {
